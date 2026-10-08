@@ -173,6 +173,15 @@ const readingMinutes = Math.max(1, Math.ceil(wordCount / 200));
       .trim();
   }
 
+  // Links to other sites open in a new tab so the reader keeps their place in
+  // the article. Markdown has no syntax for target, so tag them here.
+  for (const a of document.querySelectorAll<HTMLAnchorElement>('.blog-article__content a[href]')) {
+    if (/^https?:$/.test(a.protocol) && a.hostname !== location.hostname) {
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+    }
+  }
+
   // On narrow screens, tables collapse into a stack of label:value cards (CSS
   // below) rather than scrolling sideways. The label comes from attr(data-label)
   // in CSS, which needs the header text copied onto every cell in that column —
@@ -378,6 +387,23 @@ const readingMinutes = Math.max(1, Math.ceil(wordCount / 200));
     margin-bottom: 0.9rem;
     line-height: 1.65;
     color: var(--c-ink);
+  }
+
+  .blog-article__content :global(a) {
+    color: var(--c-accent);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.2em;
+    transition: text-decoration-thickness 0.2s var(--ease);
+  }
+
+  .blog-article__content :global(a:hover) {
+    text-decoration-thickness: 2px;
+  }
+
+  /* Sources / closing note: five times the 0.9rem paragraph gap on each side. */
+  .blog-article__content :global(hr) {
+    margin-block: 4.5rem;
   }
 
   .blog-article__content :global(ul),

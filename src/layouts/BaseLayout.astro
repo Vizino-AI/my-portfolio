@@ -1,7 +1,6 @@
 ---
 import '../styles/global.css';
 import Analytics from '@vercel/analytics/astro';
-import AnnounceBar from '../components/AnnounceBar.astro';
 import Nav from '../components/Nav.astro';
 import Footer from '../components/Footer.astro';
 import { profile } from '../data/profile';
@@ -79,7 +78,6 @@ const personSchema = {
     </div>
 
     <a class="skip-link" href="#main">Skip to content</a>
-    <AnnounceBar />
     <Nav />
     <main id="main">
       <slot />

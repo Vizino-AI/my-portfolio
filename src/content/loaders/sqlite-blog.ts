@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { Loader } from 'astro/loaders';
 
@@ -12,6 +13,14 @@ interface PostRow {
   cover_alt: string | null;
   draft: number;
   body_md: string;
+}
+
+interface ReferenceRow {
+  post_slug: string;
+  title: string;
+  url: string | null;
+  source: string | null;
+  note: string | null;
 }
 
 /**
@@ -34,11 +43,34 @@ export function sqliteBlogLoader({ dbPath }: { dbPath: string }): Loader {
       async function sync() {
         const db = new Database(absPath, { readonly: true });
         const rows = db.prepare('SELECT * FROM posts').all() as PostRow[];
+        // post_references is created by the editor (npm run editor); a database
+        // that has never been opened by it simply has no references yet.
+        const hasReferences = db
+          .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'post_references'")
+          .get();
+        const referenceRows = hasReferences
+          ? (db
+              .prepare('SELECT post_slug, title, url, source, note FROM post_references ORDER BY post_slug, position')
+              .all() as ReferenceRow[])
+          : [];
         db.close();
+
+        const referencesBySlug = new Map<string, ReferenceRow[]>();
+        for (const ref of referenceRows) {
+          const list = referencesBySlug.get(ref.post_slug) ?? [];
+          list.push(ref);
+          referencesBySlug.set(ref.post_slug, list);
+        }
 
         store.clear();
 
         for (const row of rows) {
+          const references = (referencesBySlug.get(row.slug) ?? []).map((ref) => ({
+            title: ref.title,
+            url: ref.url ?? undefined,
+            source: ref.source ?? undefined,
+            note: ref.note ?? undefined,
+          }));
           const data = await parseData({
             id: row.slug,
             data: {
@@ -49,6 +81,7 @@ export function sqliteBlogLoader({ dbPath }: { dbPath: string }): Loader {
               cover: row.cover ?? undefined,
               coverAlt: row.cover_alt ?? undefined,
               draft: Boolean(row.draft),
+              references,
             },
           });
 
@@ -59,7 +92,7 @@ export function sqliteBlogLoader({ dbPath }: { dbPath: string }): Loader {
             data,
             body: row.body_md,
             rendered,
-            digest: generateDigest(JSON.stringify(row)),
+            digest: generateDigest(JSON.stringify({ row, references })),
           });
         }
 
@@ -69,13 +102,23 @@ export function sqliteBlogLoader({ dbPath }: { dbPath: string }): Loader {
       await sync();
 
       // In dev, watch the .sqlite3 file itself so edits show up without restarting the server.
+      // On macOS a SQLite write often reaches the watcher as unlink + add rather
+      // than change, so add counts too. The editor saves every second or so
+      // while typing; the debounce keeps one sync from racing the next.
       if (watcher) {
         watcher.add(absPath);
-        watcher.on('change', async (changedPath) => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const onEvent = (changedPath: string) => {
           if (changedPath !== absPath) return;
-          await sync();
-          logger.info('Reloaded posts after blog.sqlite3 change');
-        });
+          clearTimeout(timer);
+          timer = setTimeout(async () => {
+            if (!existsSync(absPath)) return;
+            await sync();
+            logger.info('Reloaded posts after blog.sqlite3 change');
+          }, 150);
+        };
+        watcher.on('change', onEvent);
+        watcher.on('add', onEvent);
       }
     },
   };

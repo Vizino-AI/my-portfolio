@@ -104,6 +104,21 @@ const readingMinutes = Math.max(1, Math.ceil(wordCount / 200));
 
         <div class="blog-article__content">
           <Content />
+
+          {post.data.references.length > 0 && (
+            <section class="blog-article__references" aria-labelledby="references-heading">
+              <h2 id="references-heading">Sources</h2>
+              <ol>
+                {post.data.references.map(
+                  (ref: { title: string; url?: string; source?: string; note?: string }) => (
+                    // One line on purpose: a line break between these would render
+                    // as a space before the comma.
+                    <li>{ref.url ? <a href={ref.url}>{ref.title}</a> : ref.title}{ref.source && <span class="blog-article__reference-source">, {ref.source}</span>}{ref.note && <span class="blog-article__reference-note"> — {ref.note}</span>}</li>
+                  )
+                )}
+              </ol>
+            </section>
+          )}
         </div>
       </div>
 
@@ -622,6 +637,29 @@ const readingMinutes = Math.max(1, Math.ceil(wordCount / 200));
 
   .blog-article__content :global(blockquote strong) {
     color: var(--c-accent);
+  }
+
+  /* Written in the editor's References panel, not in the Markdown body. Spaced
+     like the hand-written `---` sources note so both read as the same thing. */
+  .blog-article__references {
+    margin-top: 4.5rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--c-line);
+    font-size: var(--t-small);
+  }
+
+  .blog-article__content .blog-article__references h2 {
+    margin-top: 0;
+    font-size: 1.1875rem;
+  }
+
+  .blog-article__references li {
+    color: var(--c-ink);
+  }
+
+  .blog-article__reference-source,
+  .blog-article__reference-note {
+    color: var(--c-ink-muted);
   }
 
   .blog-article__footer {

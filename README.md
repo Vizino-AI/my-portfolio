@@ -21,6 +21,7 @@ conventions below are not enforced by tooling and are easy to break by accident.
 | Preview the build | `npm run preview` |
 | Type-check | `npm run check` |
 | What CI runs | `npm ci && npm run check && npm run build` |
+| Blog writing tool (local only) | `npm run editor` → http://127.0.0.1:4322 |
 | Pull a blog post out of SQLite for editing | `npm run blog:pull -- <slug>` |
 | Push an edited post back into SQLite | `npm run blog:push -- <slug>` |
 | Regenerate the default OG image | `node scripts/make-og.mjs` |
@@ -58,6 +59,7 @@ the wrong direction.
 | **Content Collections + Zod** | Case-study frontmatter is validated at build time, so a malformed entry fails the build rather than rendering broken. |
 | **Vercel** | Static hosting plus analytics; matches the static output. |
 | **TypeScript** | `npm run check` is the only correctness gate here, so types are carrying real weight. |
+| **React + Tiptap**, `editor/` only | Rich-text editing needs a real editor component. It is a local tool that writes the database; none of it ships to the site, which stays static. |
 
 ## Directory map
 
@@ -65,6 +67,7 @@ the wrong direction.
 .github/workflows/    CI — type-check and build on every push
 astro.config.mjs      Site URL, sitemap integration
 db/blog.sqlite3       Blog content (read-only at build time; committed to the repo)
+editor/               Local blog writing tool (npm run editor) — never part of the build
 public/               Served verbatim — images, favicon, robots.txt, OG image
 scripts/              One-off maintenance scripts, not part of the build
 src/
@@ -94,6 +97,17 @@ project, validated by Zod.
 the build; nothing queries it at runtime. In dev the loader watches the file, so
 edits appear without a restart.
 
+| Table | Holds | Read by the site? |
+|---|---|---|
+| `posts` | One row per post: metadata plus the body as Markdown in `body_md` | Yes |
+| `post_references` | The post's Sources list, ordered by `position`, rendered after the body | Yes |
+| `post_revisions` | A JSON snapshot per save; saves within 10 minutes share one row, 100 kept per post | No — editor only |
+| `media` | Every file in `public/images/blog/`, with kind, owning post, size and dimensions | No — editor only |
+
+The editor creates the last three tables on first run (additive only — it never
+alters `posts`), and the loader treats a missing `post_references` as "no
+references", so an older database still builds.
+
 ### Draft handling — read this before adding content
 
 Both collections have a `draft` boolean, and every query honours it through one
@@ -122,7 +136,60 @@ numbers are in.
 
 ## Blog workflow
 
-SQLite is not editable by hand, so posts round-trip through Markdown:
+Write in the editor, with `npm run dev` running alongside for the real preview:
+
+```bash
+npm run editor   # http://127.0.0.1:4322 — writes straight to db/blog.sqlite3
+npm run dev      # http://localhost:4321 — picks up every save
+```
+
+The editor is a React + Tiptap single-page app served by Vite, with a small API
+(`editor/server/`) mounted on the same dev server. It lists posts, creates
+drafts, autosaves about a second after typing stops, and handles publish /
+unpublish, metadata, cover, references and version history. A post becomes
+public on the next deploy after it is published *and* `db/blog.sqlite3` is
+committed.
+
+**The body is still stored as Markdown**, so the site's rendering, Shiki code
+highlighting, the outline and `blog:pull`/`blog:push` are unchanged. The editor
+converts in both directions (`editor/src/markdown.ts`, `editor/src/extensions.tsx`)
+and preserves this blog's own conventions exactly:
+
+- image, then `*caption*` on the next line → one figure with an editable caption
+- `<video …></video>`, then `*caption*` → video, tag kept verbatim
+- `<iframe …></iframe>`, blank line, `*caption*` → YouTube / Vimeo embed
+- any other HTML block → an editable raw-HTML block, written back verbatim
+- code fences grow past any backtick run inside them (the CRAFTS prompt needs four)
+- tables keep the `|---|---|` delimiter row
+
+Opening a post never rewrites it: an untouched body is saved exactly as loaded.
+If loading shows that a later save *would* change some lines (for example
+`* item` becomes `- item`), the editor says so and lists them before anything
+is written. All three current posts round-trip with zero changed lines — keep
+it that way when touching either file above.
+
+**Uploads** go to `public/images/blog/` named `<slug>-<name>`, with the untouched
+file copied to `_originals/`. Photos and screenshots are resized to 1600px wide
+and converted to WebP; SVG and GIF are kept as they are; a cover is cropped to
+1600×1066 JPEG and saved as `<slug>.jpg`. Videos are stored as uploaded — the
+editor warns above 20 MB, since they land in Git; use a YouTube / Vimeo embed
+for anything long.
+
+**No login, by design**: the server binds to 127.0.0.1 only. Because any web page
+open in the same browser could still call it, writes must carry an
+`X-Blog-Editor` header and a matching `Origin`, and CORS is off.
+
+**Two macOS quirks the code works around** — do not "simplify" them away:
+
+- The editor bumps the database file's mtime after each write
+  (`notifySite` in `editor/server/db.ts`). Writes through its long-lived
+  connection often raise no file-watcher event, so the dev site would keep
+  showing the old post.
+- The loader listens for `add` as well as `change`, since a SQLite write can
+  surface as unlink + add.
+
+**`blog:pull` / `blog:push`** still work for editing a post as a plain Markdown
+file:
 
 ```bash
 npm run blog:pull -- my-post-slug   # db/blog.sqlite3 → _drafts/my-post-slug.md
@@ -130,12 +197,15 @@ npm run blog:pull -- my-post-slug   # db/blog.sqlite3 → _drafts/my-post-slug.m
 npm run blog:push -- my-post-slug   # _drafts/my-post-slug.md → db/blog.sqlite3
 ```
 
-`_drafts/` is a scratch area, gitignored going forward. Only the database is the
+They only know the `posts` table: references are left alone, and a push records
+no revision. `_drafts/` is a scratch area, gitignored. Only the database is the
 real store — do not treat a file in `_drafts/` as the source of truth.
 
 ## Images
 
 **Blog covers** go in `public/images/blog/` as **landscape 1600x1066 JPEG**.
+The editor's cover upload produces exactly this; the notes below are for adding
+one by hand.
 The article view renders a cover at its natural aspect ratio with no crop, so a
 portrait image becomes a full-screen wall before the first paragraph. The card
 listing crops to 1200x630 independently. Keep the untouched original in
@@ -195,4 +265,8 @@ Real problems, recorded so they are not rediscovered:
   doing any work.
 - **`db/blog.sqlite3` is a binary committed to Git**, so post edits produce
   opaque diffs and can conflict badly. Acceptable for one author; revisit if
-  that changes.
+  that changes. Revision snapshots make the file grow with every writing
+  session (100 kept per post).
+- **The editor has no automated tests either.** The round-trip guarantee is
+  checked by opening each post and confirming the editor shows no "would be
+  rewritten" notice.

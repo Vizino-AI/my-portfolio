@@ -44,6 +44,16 @@ const blog = defineCollection({
     cover: z.string().optional(),
     coverAlt: z.string().optional(),
     draft: z.boolean().default(false),
+    references: z
+      .array(
+        z.object({
+          title: z.string(),
+          url: z.string().url().optional(),
+          source: z.string().optional(),
+          note: z.string().optional(),
+        })
+      )
+      .default([]),
   }),
 });
 

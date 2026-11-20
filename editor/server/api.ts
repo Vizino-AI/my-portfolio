@@ -257,7 +257,7 @@ async function upload(
     keepOriginal(paths, `${slug}-${base}${ext || '.bin'}`, body);
 
     if (kind === 'cover') {
-      // Covers follow the README's spec: landscape 1600x1066 JPEG, cropped from the centre.
+      // Covers follow the spec in docs/development.md: landscape 1600x1066 JPEG, cropped from the centre.
       const data = await sharp(body)
         .rotate()
         .resize({ ...COVER_SIZE, fit: 'cover', position: 'attention' })

@@ -29,6 +29,11 @@ export interface Post {
   draft: boolean;
   body: string;
   references: Reference[];
+  /** Slug of the post's one category. */
+  category: string | null;
+  /** Slug of the series this post is a part of, and where it sits in it (1, 2, …). */
+  series: string | null;
+  seriesOrder: number | null;
 }
 
 export interface PostSummary {
@@ -38,6 +43,30 @@ export interface PostSummary {
   draft: boolean;
   excerpt: string;
   lastSavedAt: string | null;
+  category: string | null;
+  series: string | null;
+  seriesOrder: number | null;
+}
+
+export interface Category {
+  slug: string;
+  name: string;
+  description: string;
+  position: number;
+  postCount: number;
+}
+
+export type SeriesStatus = 'ongoing' | 'complete';
+
+export interface Series {
+  slug: string;
+  title: string;
+  description: string;
+  status: SeriesStatus;
+  /** What the site calls the first part: 1 ("Part 1, 2, 3…") or 0, for a series that opens with a "Part 0" overview. */
+  firstNumber: 0 | 1;
+  /** Every part, drafts included, in reading order. */
+  parts: Array<{ slug: string; title: string; order: number; draft: boolean }>;
 }
 
 export interface Revision {
@@ -68,6 +97,9 @@ interface PostRow {
   cover_alt: string | null;
   draft: number;
   body_md: string;
+  category_slug: string | null;
+  series_slug: string | null;
+  series_order: number | null;
 }
 
 /** Autosaves within this window overwrite the latest revision instead of adding one. */
@@ -105,6 +137,9 @@ export function openBlogDb(dbPath: string, mediaDir: string) {
         'SELECT title, url, source, note FROM post_references WHERE post_slug = ? ORDER BY position'
       )
       .all(row.slug) as Reference[],
+    category: row.category_slug,
+    series: row.series_slug,
+    seriesOrder: row.series_order,
   });
 
   function getPost(slug: string): Post | null {
@@ -117,6 +152,7 @@ export function openBlogDb(dbPath: string, mediaDir: string) {
       db
         .prepare(
           `SELECT p.slug, p.title, p.date, p.draft, p.excerpt,
+                  p.category_slug AS category, p.series_slug AS series, p.series_order AS seriesOrder,
                   (SELECT MAX(saved_at) FROM post_revisions r WHERE r.post_slug = p.slug) AS last_saved_at
            FROM posts p
            ORDER BY p.draft DESC, p.date DESC, p.slug`
@@ -159,14 +195,38 @@ export function openBlogDb(dbPath: string, mediaDir: string) {
     ).run(post.slug, post.slug, REVISIONS_KEPT_PER_POST);
   }
 
+  /**
+   * A post may only point at a category and series that exist, and two parts
+   * of one series can't share a place in it, or the site couldn't tell which
+   * is part 2.
+   */
+  function checkTaxonomy(post: Post) {
+    if (post.category && !db.prepare('SELECT 1 FROM categories WHERE slug = ?').get(post.category)) {
+      throw new HttpError(400, `Category "${post.category}" no longer exists. Pick another one.`);
+    }
+    if (!post.series) return;
+    if (!db.prepare('SELECT 1 FROM series WHERE slug = ?').get(post.series)) {
+      throw new HttpError(400, `Series "${post.series}" no longer exists. Pick another one.`);
+    }
+    const clash = db
+      .prepare('SELECT title FROM posts WHERE series_slug = ? AND series_order = ? AND slug != ?')
+      .get(post.series, post.seriesOrder, post.slug) as { title: string } | undefined;
+    if (clash) throw new HttpError(409, `Part ${post.seriesOrder} of this series is already "${clash.title}"`);
+  }
+
   const writePost = db.transaction((post: Post) => {
+    checkTaxonomy(post);
     db.prepare(
-      `INSERT INTO posts (slug, title, date, updated_at, excerpt, cover, cover_alt, draft, body_md)
-       VALUES (@slug, @title, @date, @updatedAt, @excerpt, @cover, @coverAlt, @draft, @body)
+      `INSERT INTO posts (slug, title, date, updated_at, excerpt, cover, cover_alt, draft, body_md,
+                          category_slug, series_slug, series_order)
+       VALUES (@slug, @title, @date, @updatedAt, @excerpt, @cover, @coverAlt, @draft, @body,
+               @category, @series, @seriesOrder)
        ON CONFLICT(slug) DO UPDATE SET
          title = excluded.title, date = excluded.date, updated_at = excluded.updated_at,
          excerpt = excluded.excerpt, cover = excluded.cover, cover_alt = excluded.cover_alt,
-         draft = excluded.draft, body_md = excluded.body_md`
+         draft = excluded.draft, body_md = excluded.body_md,
+         category_slug = excluded.category_slug, series_slug = excluded.series_slug,
+         series_order = excluded.series_order`
     ).run({ ...post, draft: post.draft ? 1 : 0 });
 
     db.prepare('DELETE FROM post_references WHERE post_slug = ?').run(post.slug);
@@ -277,7 +337,123 @@ export function openBlogDb(dbPath: string, mediaDir: string) {
     ).run(m);
   }
 
+  /* ------------------------------------------------- categories & series */
+
+  function listCategories(): Category[] {
+    return db
+      .prepare(
+        `SELECT c.slug, c.name, c.description, c.position,
+                (SELECT COUNT(*) FROM posts p WHERE p.category_slug = c.slug) AS postCount
+         FROM categories c ORDER BY c.position, c.name`
+      )
+      .all() as Category[];
+  }
+
+  function listSeries(): Series[] {
+    const rows = db.prepare('SELECT slug, title, description, status, first_number AS firstNumber FROM series ORDER BY created_at, slug').all() as Array<
+      Omit<Series, 'parts'>
+    >;
+    const parts = db.prepare(
+      `SELECT slug, title, series_order AS "order", draft FROM posts
+       WHERE series_slug = ? ORDER BY series_order, date, slug`
+    );
+    return rows.map((s) => ({
+      ...s,
+      parts: (parts.all(s.slug) as Array<{ slug: string; title: string; order: number; draft: number }>).map((p) => ({
+        ...p,
+        draft: Boolean(p.draft),
+      })),
+    }));
+  }
+
+  /** Renaming a slug moves every post that points at it, in the same transaction. */
+  const saveCategory = db.transaction((originalSlug: string | null, c: Omit<Category, 'postCount'>) => {
+    if (c.slug !== originalSlug && db.prepare('SELECT 1 FROM categories WHERE slug = ?').get(c.slug)) {
+      throw new HttpError(409, `Category slug "${c.slug}" is already taken`);
+    }
+    if (originalSlug === null) {
+      const next = (db.prepare('SELECT COALESCE(MAX(position), -1) + 1 AS n FROM categories').get() as { n: number }).n;
+      db.prepare('INSERT INTO categories (slug, name, description, position) VALUES (?, ?, ?, ?)').run(
+        c.slug,
+        c.name,
+        c.description,
+        next
+      );
+    } else {
+      const res = db
+        .prepare('UPDATE categories SET slug = ?, name = ?, description = ?, position = ? WHERE slug = ?')
+        .run(c.slug, c.name, c.description, c.position, originalSlug);
+      if (!res.changes) throw new HttpError(404, `No category "${originalSlug}"`);
+      if (c.slug !== originalSlug) {
+        db.prepare('UPDATE posts SET category_slug = ? WHERE category_slug = ?').run(c.slug, originalSlug);
+      }
+    }
+  });
+
+  /** Swaps a category with its neighbour; `direction` -1 moves it up the list. */
+  const moveCategory = db.transaction((slug: string, direction: -1 | 1) => {
+    const list = listCategories();
+    const i = list.findIndex((c) => c.slug === slug);
+    const j = i + direction;
+    if (i < 0 || j < 0 || j >= list.length) return;
+    [list[i], list[j]] = [list[j], list[i]];
+    const set = db.prepare('UPDATE categories SET position = ? WHERE slug = ?');
+    list.forEach((c, n) => set.run(n, c.slug));
+  });
+
+  /** In use means in use: posts have to be moved out first, so none silently loses its category. */
+  function deleteCategory(slug: string) {
+    const used = db.prepare('SELECT COUNT(*) AS n FROM posts WHERE category_slug = ?').get(slug) as { n: number };
+    if (used.n) throw new HttpError(400, `${used.n} post(s) are still in this category. Move them first.`);
+    if (!db.prepare('DELETE FROM categories WHERE slug = ?').run(slug).changes) throw new HttpError(404, `No category "${slug}"`);
+  }
+
+  const saveSeries = db.transaction((originalSlug: string | null, s: Omit<Series, 'parts'>) => {
+    if (s.slug !== originalSlug && db.prepare('SELECT 1 FROM series WHERE slug = ?').get(s.slug)) {
+      throw new HttpError(409, `Series slug "${s.slug}" is already taken`);
+    }
+    if (originalSlug === null) {
+      db.prepare('INSERT INTO series (slug, title, description, status, first_number, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(
+        s.slug,
+        s.title,
+        s.description,
+        s.status,
+        s.firstNumber,
+        new Date().toISOString()
+      );
+    } else {
+      const res = db
+        .prepare('UPDATE series SET slug = ?, title = ?, description = ?, status = ?, first_number = ? WHERE slug = ?')
+        .run(s.slug, s.title, s.description, s.status, s.firstNumber, originalSlug);
+      if (!res.changes) throw new HttpError(404, `No series "${originalSlug}"`);
+      if (s.slug !== originalSlug) {
+        db.prepare('UPDATE posts SET series_slug = ? WHERE series_slug = ?').run(s.slug, originalSlug);
+      }
+    }
+  });
+
+  function deleteSeries(slug: string) {
+    const used = db.prepare('SELECT COUNT(*) AS n FROM posts WHERE series_slug = ?').get(slug) as { n: number };
+    if (used.n) throw new HttpError(400, `${used.n} post(s) are still in this series. Take them out first.`);
+    if (!db.prepare('DELETE FROM series WHERE slug = ?').run(slug).changes) throw new HttpError(404, `No series "${slug}"`);
+  }
+
+  const withNotify =
+    <A extends unknown[], R>(fn: (...args: A) => R) =>
+    (...args: A): R => {
+      const result = fn(...args);
+      notifySite();
+      return result;
+    };
+
   return {
+    listCategories,
+    saveCategory: withNotify(saveCategory),
+    moveCategory: withNotify(moveCategory),
+    deleteCategory: withNotify(deleteCategory),
+    listSeries,
+    saveSeries: withNotify(saveSeries),
+    deleteSeries: withNotify(deleteSeries),
     getPost,
     listPosts,
     savePost: savePostAndNotify,
@@ -362,7 +538,41 @@ function migrate(db: Database.Database) {
       bytes INTEGER NOT NULL,
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS categories (
+      slug TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      position INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS series (
+      slug TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'ongoing' CHECK (status IN ('ongoing', 'complete')),
+      first_number INTEGER NOT NULL DEFAULT 1 CHECK (first_number IN (0, 1)),
+      created_at TEXT NOT NULL
+    );
   `);
+
+  // Added after the series table first shipped; same additive rule as below.
+  const seriesColumns = new Set((db.prepare('PRAGMA table_info(series)').all() as Array<{ name: string }>).map((c) => c.name));
+  if (!seriesColumns.has('first_number')) {
+    db.exec('ALTER TABLE series ADD COLUMN first_number INTEGER NOT NULL DEFAULT 1 CHECK (first_number IN (0, 1))');
+  }
+
+  // New nullable columns on posts. ADD COLUMN leaves every existing row and
+  // the columns blog:push writes untouched; it just can't say IF NOT EXISTS.
+  const columns = new Set((db.prepare('PRAGMA table_info(posts)').all() as Array<{ name: string }>).map((c) => c.name));
+  for (const [name, type] of [
+    ['category_slug', 'TEXT'],
+    ['series_slug', 'TEXT'],
+    ['series_order', 'INTEGER'],
+  ]) {
+    if (!columns.has(name)) db.exec(`ALTER TABLE posts ADD COLUMN ${name} ${type}`);
+  }
+  db.exec('CREATE INDEX IF NOT EXISTS posts_by_series ON posts (series_slug, series_order)');
 }
 
 /** Registers files that were put in public/images/blog/ by hand before the editor existed. */

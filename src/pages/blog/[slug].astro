@@ -1,11 +1,12 @@
 ---
 import { getCollection, render } from 'astro:content';
-import { isVisible } from '../../utils/drafts';
 import BaseLayout from '../../layouts/BaseLayout.astro';
+import SeriesBox from '../../components/SeriesBox.astro';
 import { profile } from '../../data/profile';
+import { findInSeries, getPosts, getSeriesList, type Post } from '../../utils/blog';
 
 export async function getStaticPaths() {
-  const posts = await getCollection('blog', isVisible);
+  const posts = await getPosts();
   return posts.map((post) => ({
     params: { slug: post.id },
     props: { post },
@@ -13,11 +14,15 @@ export async function getStaticPaths() {
 }
 
 interface Props {
-  post: any;
+  post: Post;
 }
 
 const { post } = Astro.props;
 const { Content, headings } = await render(post);
+
+const [categories, seriesList] = await Promise.all([getCollection('blogCategories'), getSeriesList()]);
+const category = categories.find((c) => c.id === post.data.category?.id);
+const inSeries = findInSeries(seriesList, post);
 
 // Only h2/h3, and only when there are enough of them for an outline to be worth
 // the space. Headings inside fenced code blocks are not in this list.
@@ -56,6 +61,18 @@ const readingMinutes = Math.max(1, Math.ceil(wordCount / 200));
         {import.meta.env.DEV && post.data.draft && (
           <p class="blog-article__draft-flag">Draft — visible locally only</p>
         )}
+        {/* A series label already says where the post belongs, so it replaces the category. */}
+        {inSeries ? (
+          <p class="blog-article__eyebrow">
+            <a href={`/blog/series/${inSeries.series.id}`}>
+              {inSeries.series.data.title} · Part {inSeries.current.number}
+            </a>
+          </p>
+        ) : category && (
+          <p class="blog-article__eyebrow">
+            <a href={`/blog/category/${category.id}`}>{category.data.name}</a>
+          </p>
+        )}
         <h1>{post.data.title}</h1>
         <div class="blog-article__meta">
           <span class="blog-article__author">{profile.name}</span>
@@ -74,6 +91,8 @@ const readingMinutes = Math.max(1, Math.ceil(wordCount / 200));
         </div>
       </header>
 
+      {inSeries && <SeriesBox inSeries={inSeries} variant="inline" />}
+
       {post.data.cover && (
         <figure class="blog-article__cover">
           <img
@@ -87,18 +106,23 @@ const readingMinutes = Math.max(1, Math.ceil(wordCount / 200));
       )}
 
       <div class="blog-article__layout">
-        {showOutline && (
-          <aside class="blog-article__outline">
-            <nav aria-labelledby="outline-heading">
-              <p class="blog-article__outline-title" id="outline-heading">On this page</p>
-              <ol>
-                {outline.map((h: { slug: string; text: string; depth: number }) => (
-                  <li data-depth={h.depth}>
-                    <a href={`#${h.slug}`}>{h.text}</a>
-                  </li>
-                ))}
-              </ol>
-            </nav>
+        {(inSeries || showOutline) && (
+          <aside class="blog-article__aside">
+            <div class="blog-article__aside-inner">
+              {inSeries && <SeriesBox inSeries={inSeries} variant="aside" />}
+              {showOutline && (
+                <nav class="blog-article__outline" aria-labelledby="outline-heading">
+                  <p class="blog-article__outline-title" id="outline-heading">On this page</p>
+                  <ol>
+                    {outline.map((h: { slug: string; text: string; depth: number }) => (
+                      <li data-depth={h.depth}>
+                        <a href={`#${h.slug}`}>{h.text}</a>
+                      </li>
+                    ))}
+                  </ol>
+                </nav>
+              )}
+            </div>
           </aside>
         )}
 
@@ -122,8 +146,29 @@ const readingMinutes = Math.max(1, Math.ceil(wordCount / 200));
         </div>
       </div>
 
+      {inSeries && (inSeries.prev || inSeries.next) && (
+        <nav class="series-pager" aria-label={`More from ${inSeries.series.data.title}`}>
+          {inSeries.prev ? (
+            <a class="series-pager__link" href={`/blog/${inSeries.prev.post.id}`} rel="prev">
+              <span class="series-pager__dir">← Part {inSeries.prev.number}</span>
+              <span class="series-pager__title">{inSeries.prev.post.data.title}</span>
+            </a>
+          ) : (
+            <span />
+          )}
+          {inSeries.next ? (
+            <a class="series-pager__link series-pager__link--next" href={`/blog/${inSeries.next.post.id}`} rel="next">
+              <span class="series-pager__dir">Part {inSeries.next.number} →</span>
+              <span class="series-pager__title">{inSeries.next.post.data.title}</span>
+            </a>
+          ) : (
+            <span />
+          )}
+        </nav>
+      )}
+
       <footer class="blog-article__footer">
-        <a href="/blog" class="blog-article__back">← Back to all posts</a>
+        <a href="/" class="blog-article__back">← Back to all posts</a>
       </footer>
     </div>
   </article>
@@ -444,23 +489,46 @@ const readingMinutes = Math.max(1, Math.ceil(wordCount / 200));
     position: relative;
   }
 
-  /* Hidden below the width at which the outline fits beside the 720px column
-     without pushing it off centre. Content stays centred either way. */
-  .blog-article__outline {
+  /* The right-hand column: series box, then outline. Below 1180px there's no
+     room for it (the series box then shows above the body instead).
+     When it shows, the 720px column and the aside are centred as one group, so
+     the article sits left of centre by half the aside's width plus the gap.
+     A post with neither a series nor an outline has no aside and stays centred. */
+  .blog-article__aside {
     display: none;
   }
 
-  @media (min-width: 1240px) {
-    .blog-article__outline {
+  @media (min-width: 1180px) {
+    .blog-article:has(.blog-article__aside) {
+      --aside-width: 280px;
+      --aside-gap: 3rem;
+      --column-shift: calc((var(--aside-width) + var(--aside-gap)) / 2);
+    }
+
+    .blog-article:has(.blog-article__aside) :is(
+        .blog-article__header,
+        .blog-article__cover,
+        .blog-article__content,
+        .series-pager,
+        .blog-article__footer
+      ) {
+      position: relative;
+      left: calc(-1 * var(--column-shift));
+    }
+
+    .blog-article__aside {
       display: block;
       position: absolute;
       top: 0;
-      left: calc(50% + 360px + 2rem);
-      width: 180px;
+      left: calc(50% + 360px + var(--aside-gap) - var(--column-shift));
+      width: var(--aside-width);
       height: 100%;
     }
 
-    .blog-article__outline nav {
+    .blog-article__aside-inner {
+      display: flex;
+      flex-direction: column;
+      gap: 2.5rem;
       position: sticky;
       top: 2.5rem;
       max-height: calc(100vh - 5rem);
@@ -468,12 +536,11 @@ const readingMinutes = Math.max(1, Math.ceil(wordCount / 200));
     }
   }
 
+  /* Same label style as the series list above it in the aside. */
   .blog-article__outline-title {
-    margin: 0 0 0.75rem;
+    margin: 0 0 0.6rem;
     color: var(--c-ink-faint);
-    font-size: var(--t-micro);
-    letter-spacing: var(--ls-label);
-    text-transform: uppercase;
+    font-size: 0.8125rem;
   }
 
   .blog-article__outline ol {
@@ -549,6 +616,67 @@ const readingMinutes = Math.max(1, Math.ceil(wordCount / 200));
   .blog-article__content :global(thead th) {
     background: var(--c-bg-soft);
     font-weight: 500;
+  }
+
+  .blog-article__eyebrow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1rem;
+    margin: 0 0 0.85rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  .blog-article__eyebrow a {
+    color: var(--c-accent);
+    text-decoration: none;
+  }
+
+  .blog-article__eyebrow a:hover {
+    text-decoration: underline;
+  }
+
+  .series-pager {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    max-width: 720px;
+    margin: 0 auto 2.5rem;
+  }
+
+  .series-pager__link {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    padding: 1rem 1.1rem;
+    border: 1px solid var(--c-line);
+    border-radius: var(--radius);
+    color: var(--c-ink);
+    text-decoration: none;
+    transition: border-color var(--dur) var(--ease);
+  }
+
+  .series-pager__link:hover {
+    border-color: var(--c-accent);
+  }
+
+  .series-pager__link--next {
+    text-align: right;
+  }
+
+  .series-pager__dir {
+    color: var(--c-ink-faint);
+    font-size: 0.8125rem;
+  }
+
+  .series-pager__title {
+    font-family: var(--f-display);
+    font-weight: 600;
+    line-height: 1.35;
+  }
+
+  .series-pager__link:hover .series-pager__title {
+    color: var(--c-accent);
   }
 
   .blog-article__draft-flag {
@@ -687,6 +815,10 @@ const readingMinutes = Math.max(1, Math.ceil(wordCount / 200));
 
     .blog-article__header h1 {
       font-size: clamp(1.75rem, 7vw, 2.25rem);
+    }
+
+    .series-pager {
+      grid-template-columns: 1fr;
     }
 
     /* Tables become a stack of cards: each row is a card, each cell a

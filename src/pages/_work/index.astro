@@ -1,0 +1,71 @@
+---
+import { getCollection } from 'astro:content';
+import { isVisible } from '../../utils/drafts';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import WorkCard from '../../components/WorkCard.astro';
+
+// Same order as the prev/next links on each case study.
+const work = (await getCollection('work', isVisible)).sort((a, b) => a.data.order - b.data.order);
+const description = 'Products we have taken from idea or prototype to a working, shipped product.';
+---
+
+<BaseLayout title="Case Studies" description={description}>
+  <section class="cs-head">
+    <div class="container">
+      <p class="eyebrow">Case Studies</p>
+      <h1 class="cs-head__title">Products we've shipped.</h1>
+      <p class="lead cs-head__desc">{description}</p>
+    </div>
+  </section>
+
+  <section class="section section--tight">
+    <div class="container">
+      <ul class="cs-grid">
+        {work.map((entry, i) => (
+          <li>
+            <WorkCard
+              slug={entry.slug}
+              title={entry.data.title}
+              tagline={entry.data.tagline}
+              category={entry.data.category}
+              year={entry.data.year}
+              cover={entry.data.cover}
+              coverAlt={entry.data.coverAlt}
+              stack={entry.data.stack}
+              index={i}
+            />
+          </li>
+        ))}
+      </ul>
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .cs-head {
+    padding-top: clamp(3.5rem, 9vw, 7rem);
+    padding-bottom: clamp(1rem, 2vw, 2rem);
+  }
+
+  .cs-head__title {
+    margin-top: 1rem;
+    font-size: var(--t-h1);
+    font-weight: 500;
+    line-height: var(--lh-tight);
+    letter-spacing: var(--ls-display);
+  }
+
+  .cs-head__desc {
+    margin-top: 1.25rem;
+    max-width: 40rem;
+  }
+
+  .cs-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+    gap: clamp(1.5rem, 3vw, 2.5rem);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+</style>

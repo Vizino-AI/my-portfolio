@@ -1,5 +1,7 @@
-import { defineCollection, z } from 'astro:content';
-import { sqliteBlogLoader } from './loaders/sqlite-blog';
+import { defineCollection, reference, z } from 'astro:content';
+import { sqliteBlogLoader, sqliteCategoryLoader, sqliteSeriesLoader } from './loaders/sqlite-blog';
+
+const DB_PATH = 'db/blog.sqlite3';
 
 const work = defineCollection({
   type: 'content',
@@ -34,8 +36,29 @@ const work = defineCollection({
   }),
 });
 
+// Written in the editor's 分類與系列 dialog.
+const blogCategories = defineCollection({
+  loader: sqliteCategoryLoader({ dbPath: DB_PATH }),
+  schema: z.object({
+    name: z.string(),
+    description: z.string().default(''),
+    position: z.number(),
+  }),
+});
+
+const blogSeries = defineCollection({
+  loader: sqliteSeriesLoader({ dbPath: DB_PATH }),
+  schema: z.object({
+    title: z.string(),
+    description: z.string().default(''),
+    status: z.enum(['ongoing', 'complete']),
+    /** What the first part is called: 1 ("Part 1") or 0 (a "Part 0" overview). */
+    firstNumber: z.union([z.literal(0), z.literal(1)]).default(1),
+  }),
+});
+
 const blog = defineCollection({
-  loader: sqliteBlogLoader({ dbPath: 'db/blog.sqlite3' }),
+  loader: sqliteBlogLoader({ dbPath: DB_PATH }),
   schema: z.object({
     title: z.string(),
     date: z.date(),
@@ -54,7 +77,16 @@ const blog = defineCollection({
         })
       )
       .default([]),
+    // reference() makes the build fail on a post pointing at a missing category or series.
+    category: reference('blogCategories').optional(),
+    series: z
+      .object({
+        id: reference('blogSeries'),
+        // Where the editor put it; the site numbers parts from this order, starting at the series' firstNumber.
+        order: z.number(),
+      })
+      .optional(),
   }),
 });
 
-export const collections = { work, blog };
+export const collections = { work, blog, blogCategories, blogSeries };

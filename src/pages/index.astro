@@ -1,127 +1,43 @@
 ---
-import { getCollection } from 'astro:content';
-import { isVisible } from '../utils/drafts';
+// The homepage is the blog: what the studio does in one line, then the writing.
+// /blog redirects here (astro.config.mjs); posts, categories and series stay under /blog/.
 import BaseLayout from '../layouts/BaseLayout.astro';
-import WorkCard from '../components/WorkCard.astro';
-import Carousel from '../components/Carousel.astro';
-import SectionHeading from '../components/SectionHeading.astro';
-import Capabilities from '../components/Capabilities.astro';
+import BlogNav from '../components/BlogNav.astro';
+import PostGrid from '../components/PostGrid.astro';
+import { getCategories, getPosts, getSeriesList } from '../utils/blog';
 import { profile } from '../data/profile';
 
-const work = (await getCollection('work', isVisible))
-  .filter((e) => e.data.featured)
-  .sort((a, b) => a.data.order - b.data.order);
+const [posts, categoryGroups, seriesList] = await Promise.all([getPosts(), getCategories(), getSeriesList()]);
+const categories = categoryGroups.map((g) => g.category);
 ---
 
 <BaseLayout isHome>
-  <!-- ============ Hero ============ -->
-  <section class="hero">
+  <div class="home">
     <div class="container">
-      <h1 class="hero__title">{profile.role}</h1>
+      <h1 class="home__title">{profile.role}</h1>
 
-      <p class="lead hero__bio">{profile.bioShort}</p>
+      <BlogNav
+        categories={categoryGroups.map((g) => ({ slug: g.category.id, name: g.category.data.name, count: g.posts.length }))}
+        total={posts.length}
+      />
+
+      <PostGrid posts={posts} categories={categories} seriesList={seriesList} />
     </div>
-  </section>
-
-  <!-- ============ Portfolio ============ -->
-  <section class="section section--bleed" id="work">
-    <div class="container">
-      <SectionHeading title="Portfolio" />
-    </div>
-
-    <Carousel label="Portfolio" count={work.length}>
-      {work.map((entry, i) => (
-        <li>
-          <WorkCard
-            slug={entry.slug}
-            title={entry.data.title}
-            tagline={entry.data.tagline}
-            category={entry.data.category}
-            year={entry.data.year}
-            cover={entry.data.cover}
-            coverAlt={entry.data.coverAlt}
-            stack={entry.data.stack}
-            index={i}
-          />
-        </li>
-      ))}
-    </Carousel>
-  </section>
-
-  <!-- ============ Capabilities ============ -->
-  <section class="section section--tight">
-    <div class="container">
-      <SectionHeading eyebrow="Capabilities" title="What I work with." />
-      <Capabilities />
-    </div>
-  </section>
-
-  <!-- ============ Contact ============ -->
-  <section class="section contact">
-    <div class="container">
-      <hr class="rule" />
-      <div class="contact__inner" data-reveal>
-        <p class="eyebrow">Contact</p>
-        <div class="contact__actions">
-          <a class="btn" href={`mailto:${profile.email}`} target="blank">{profile.email}</a>
-          <a
-            class="btn btn--ghost"
-            href={profile.linkedin}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            LinkedIn <span aria-hidden="true">↗</span>
-          </a>
-          <a
-            class="btn btn--ghost"
-            href={profile.github}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            GitHub <span aria-hidden="true">↗</span>
-          </a>
-        </div>
-      </div>
-    </div>
-  </section>
+  </div>
 </BaseLayout>
 
 <style>
-  /* ---- Hero ---- */
-  .hero {
-    padding-top: clamp(4rem, 11vw, 9rem);
-    padding-bottom: clamp(3.5rem, 8vw, 6.5rem);
+  .home {
+    padding: clamp(3.5rem, 8vw, 6rem) 0 4rem;
   }
 
-  .hero__title {
-    font-size: var(--t-hero);
+  .home__title {
+    max-width: 22ch;
+    margin: 0 0 clamp(2rem, 4vw, 3rem);
+    font-family: var(--f-display);
+    font-size: var(--t-h1);
     font-weight: 500;
     line-height: var(--lh-tight);
     letter-spacing: var(--ls-display);
-    max-width: 22ch;
   }
-
-  .hero__bio {
-    margin-top: clamp(1.75rem, 3.5vw, 2.5rem);
-    max-width: 46rem;
-  }
-
-  .section--bleed { overflow: hidden; }
-
-  /* ---- Contact ---- */
-  .contact {
-    padding-top: 0;
-  }
-  .contact__inner { padding-top: clamp(1.5rem, 3.5vw, 2.5rem); }
-  .contact__desc {
-    margin-top: 1.5rem;
-    max-width: 38rem;
-  }
-  .contact__actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-    margin-top: clamp(2rem, 4vw, 2.75rem);
-  }
-  .contact__actions span { font-size: 0.8em; }
 </style>

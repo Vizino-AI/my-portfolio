@@ -1,38 +1,31 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import SectionHeading from '../components/SectionHeading.astro';
-import Capabilities from '../components/Capabilities.astro';
 import { profile } from '../data/profile';
+
+// Work history is hidden while the site presents as a studio. The data is still
+// in profile.experience; set this back to true to show the section again.
+const showExperience = false;
 ---
 
-<BaseLayout title="About" description={profile.bioShort}>
+<BaseLayout title="About" description={profile.studioDescription}>
   <section class="ah">
     <div class="container">
-      <div class="ah__top">
-        <img
-          class="ah__avatar"
-          src="/images/avatar.webp"
-          alt={`Photo of ${profile.name}`}
-          width="88"
-          height="88"
-          loading="eager"
-          decoding="async"
-        />
-        <p class="eyebrow">About</p>
-      </div>
-      <h1 class="ah__title">{profile.name}<span class="ah__alias"> ({profile.alias})</span></h1>
-      <p class="lead ah__loc">{profile.role} Based in {profile.location}.</p>
+      <p class="eyebrow">About</p>
+      <h1 class="ah__title">{profile.brandName}</h1>
+      <p class="lead ah__loc">A technical studio in {profile.location}.</p>
     </div>
   </section>
 
   <section class="section section--tight">
     <div class="container">
       <div class="bio prose" data-reveal>
-        {profile.bioLong.map((p) => <p>{p}</p>)}
+        {profile.studioAbout.map((p) => <p>{p}</p>)}
       </div>
     </div>
   </section>
 
+  {showExperience && (
   <section class="section section--tight">
     <div class="container">
       <SectionHeading eyebrow="Experience" title="Where I've worked." />
@@ -60,13 +53,7 @@ import { profile } from '../data/profile';
       </ol>
     </div>
   </section>
-
-  <section class="section section--tight">
-    <div class="container">
-      <SectionHeading eyebrow="Capabilities" title="What I work with." />
-      <Capabilities />
-    </div>
-  </section>
+  )}
 
   <section class="section">
     <div class="container">
@@ -91,27 +78,12 @@ import { profile } from '../data/profile';
     padding-bottom: clamp(1rem, 2vw, 2rem);
   }
 
-  .ah__top {
-    display: flex;
-    align-items: center;
-    gap: 0.875rem;
-  }
-
-  .ah__avatar {
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 1px solid var(--c-line);
-  }
-
   .ah__title {
     margin-top: 1rem;
     font-size: var(--t-h1);
     letter-spacing: var(--ls-display);
     line-height: var(--lh-tight);
   }
-  .ah__alias { color: var(--c-ink-faint); }
   .ah__loc { margin-top: 1.5rem; max-width: 44rem; }
 
   .bio p { margin-top: 1.5rem; color: var(--c-ink-muted); }

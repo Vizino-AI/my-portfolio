@@ -1,0 +1,88 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import BlogNav from '../../../components/BlogNav.astro';
+import PostGrid from '../../../components/PostGrid.astro';
+import { getCategories, getPosts, getSeriesList, type Category, type Post } from '../../../utils/blog';
+
+// Only categories with at least one visible post get a page (see getCategories).
+export async function getStaticPaths() {
+  const groups = await getCategories();
+  return groups.map(({ category, posts }) => ({ params: { slug: category.id }, props: { category, posts } }));
+}
+
+interface Props {
+  category: Category;
+  posts: Post[];
+}
+
+const { category, posts } = Astro.props;
+const [allPosts, categoryGroups, seriesList] = await Promise.all([getPosts(), getCategories(), getSeriesList()]);
+const description = category.data.description || `Posts about ${category.data.name}.`;
+---
+
+<BaseLayout title={`${category.data.name} — Blog`} description={description}>
+  <div class="blog-main">
+    <div class="container">
+      <header class="blog-header">
+        <p class="blog-header__eyebrow"><a href="/">Blog</a> / Category</p>
+        <h1>{category.data.name}</h1>
+        {category.data.description && <p class="blog-tagline">{category.data.description}</p>}
+      </header>
+
+      <BlogNav
+        categories={categoryGroups.map((g) => ({ slug: g.category.id, name: g.category.data.name, count: g.posts.length }))}
+        current={category.id}
+        total={allPosts.length}
+      />
+
+      <PostGrid posts={posts} categories={categoryGroups.map((g) => g.category)} seriesList={seriesList} hideCategory />
+    </div>
+  </div>
+</BaseLayout>
+
+<style>
+  .blog-main {
+    min-height: 100vh;
+    padding: 4rem 0;
+  }
+
+  .blog-header {
+    margin-bottom: 2rem;
+  }
+
+  .blog-header__eyebrow {
+    margin: 0 0 0.75rem;
+    color: var(--c-ink-faint);
+    font-size: 0.875rem;
+  }
+
+  .blog-header__eyebrow a {
+    color: inherit;
+  }
+
+  .blog-header__eyebrow a:hover {
+    color: var(--c-accent);
+  }
+
+  .blog-header h1 {
+    margin: 0 0 1rem 0;
+    font-family: var(--f-display);
+    font-size: var(--t-h2);
+    font-weight: 500;
+    letter-spacing: -0.02em;
+  }
+
+  .blog-tagline {
+    margin: 0;
+    font-size: 1.125rem;
+    color: var(--c-ink-muted);
+    line-height: 1.5;
+    max-width: 600px;
+  }
+
+  @media (max-width: 640px) {
+    .blog-main {
+      padding: 2rem 0;
+    }
+  }
+</style>

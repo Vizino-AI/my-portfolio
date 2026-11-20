@@ -46,20 +46,34 @@ const experience: Experience[] = [
 ];
 
 export const profile = {
-  name: 'Yu-Wen Chen',
-  alias: 'Katness',
-  shortName: 'Yu-Wen Chen',
+  name: 'Katness Chen',
+  /** Legal name. Not shown on the page; only in the Person JSON-LD (alternateName),
+      so searches for it still find the site. */
+  alias: 'Yu-Wen Chen',
+  shortName: 'Katness Chen',
   /** Site/brand name — shown in the Nav, browser tab title, and social share cards.
       Distinct from `name`, which stays the actual person for the About page, footer
       attribution, and the Person JSON-LD schema. */
   brandName: 'Vizino AI',
   role: 'Helping non-technical founders turn vibe-coded prototypes into launch-ready MVPs.',
   location: 'Ottawa, Canada',
-  email: 'yuwen.chen.ca@gmail.com',
+  email: 'contact@vizino.ai',
   linkedin: 'https://www.linkedin.com/in/yu-wen-chen-katness-chen-8340b9a4/',
   github: 'https://github.com/KatnessChen',
   resume: null as string | null,
 
+  /** The studio in one sentence: the site's default meta description. */
+  studioDescription:
+    'Vizino AI is a technical studio that turns vibe-coded prototypes into launch-ready MVPs for non-technical founders.',
+
+  /** The About page, in the studio's voice. */
+  studioAbout: [
+    'Vizino AI is a technical studio for non-technical founders. AI tools now let almost anyone vibe-code a convincing first version of a product. Getting from that prototype to an MVP that real users can rely on is a different job, and it is the job we do.',
+    'That usually means the work a demo never shows: clear specs the AI can follow, checks that catch breakage before users do, costs that stay predictable, and the edge cases real customers find on day one. We find where your product is stuck, unblock it, and leave a foundation that you and your AI tools can keep building on.',
+    'The studio grew out of six years of engineering at startups in Taiwan and Singapore and two years of freelance work, most of it taking SaaS products from an empty repository to a shipped MVP, across frontend, backend, databases and AI integration.',
+  ],
+
+  /** First-person bio and skills from when the site was a personal portfolio. Not shown anywhere now. */
   bioShort:
     "I am a software engineering based in Ottawa. Over six years at startups in Taiwan and Singapore, plus two years freelancing, I've taken SaaS products from nothing to MVP and out the door — across web frontend, backend, databases, and AI integration. I am looking to partner with non-technical founders to bridge the final mile of development, transforming their vibe-coded prototypes into highly robust, launch-ready MVPs that can scale and iterate rapidly.",
 

@@ -1,7 +1,7 @@
 # 個人資料（填完給我，我轉成 src/data/profile.ts）
 
 ## 基本
-- 英文名 / 顯示名稱：Yu-Wen Chen (Katness)
+- 英文名 / 顯示名稱：Katness Chen（法定姓名 Yu-Wen Chen，只放在結構化資料）
 - 職稱定位（一句話，出現在 Hero 大字下方）：Software Engineer building AI-integrated products.
 - 所在地：Ottawa, Canada
 - Email：yuwen.chen.ca@gmail.com

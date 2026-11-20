@@ -6,9 +6,13 @@ interface Props {
   slug: string;
   cover?: string;
   coverAlt?: string;
+  /** Category name, shown above the title. */
+  category?: string;
+  /** "Series title · Part n", for a post that is part of a series. */
+  series?: string;
 }
 
-const { title, date, excerpt, slug, cover, coverAlt } = Astro.props;
+const { title, date, excerpt, slug, cover, coverAlt, category, series } = Astro.props;
 
 const formatted = new Intl.DateTimeFormat('en-US', {
   year: 'numeric',
@@ -29,6 +33,12 @@ const dateOnlyISO = `${date.getFullYear()}-${String(date.getMonth() + 1).padStar
       </div>
     )}
     <div class="blog-card__content">
+      {(category || series) && (
+        <p class="blog-card__labels">
+          {category && <span class="blog-card__category">{category}</span>}
+          {series && <span class="blog-card__series">{series}</span>}
+        </p>
+      )}
       <h3 class="blog-card__title">{title}</h3>
       <p class="blog-card__excerpt">{excerpt}</p>
       <time class="blog-card__date" datetime={dateOnlyISO}>
@@ -77,6 +87,20 @@ const dateOnlyISO = `${date.getFullYear()}-${String(date.getMonth() + 1).padStar
 
   .blog-card__content {
     padding: 1.5rem;
+  }
+
+  .blog-card__labels {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.75rem;
+    margin: 0 0 0.6rem;
+    font-size: 0.8125rem;
+  }
+
+  .blog-card__category,
+  .blog-card__series {
+    color: var(--c-accent);
+    font-weight: 500;
   }
 
   .blog-card__title {

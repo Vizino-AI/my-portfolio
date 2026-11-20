@@ -1,0 +1,221 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import { getSeriesList, type SeriesWithParts } from '../../../utils/blog';
+
+export async function getStaticPaths() {
+  const seriesList = await getSeriesList();
+  return seriesList.map((entry) => ({ params: { slug: entry.series.id }, props: { entry } }));
+}
+
+interface Props {
+  entry: SeriesWithParts;
+}
+
+const { entry } = Astro.props;
+const { series, parts, visibleCount } = entry;
+const isComplete = series.data.status === 'complete';
+const description = series.data.description || `A ${parts.length}-part series.`;
+
+const dateFormatter = new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+const firstReadable = parts.find((p) => p.visible);
+---
+
+<BaseLayout title={`${series.data.title} — Series`} description={description}>
+  <div class="series-main">
+    <div class="container">
+      <header class="series-header">
+        <p class="series-header__eyebrow"><a href="/">Blog</a> / Series · {isComplete ? 'Complete' : 'Ongoing'}</p>
+        <h1>{series.data.title}</h1>
+        {series.data.description && <p class="series-header__desc">{series.data.description}</p>}
+        <p class="series-header__meta">
+          {visibleCount === parts.length ? `${parts.length} part${parts.length === 1 ? '' : 's'}` : `${visibleCount} of ${parts.length} parts published`}
+          {firstReadable && (
+            <>
+              <span aria-hidden="true">·</span>
+              <a href={`/blog/${firstReadable.post.id}`}>Start reading →</a>
+            </>
+          )}
+        </p>
+      </header>
+
+      <ol class="series-parts">
+        {parts.map(({ post, number, visible }) => (
+          <li class:list={['series-part', { 'series-part--soon': !visible }]}>
+            <span class="series-part__no">{String(number).padStart(2, '0')}</span>
+            <div class="series-part__body">
+              {visible ? (
+                <a class="series-part__title" href={`/blog/${post.id}`}>{post.data.title}</a>
+              ) : (
+                <span class="series-part__title">{post.data.title}</span>
+              )}
+              {visible ? (
+                <>
+                  <p class="series-part__excerpt">{post.data.excerpt}</p>
+                  <p class="series-part__meta">
+                    {dateFormatter.format(post.data.date)}
+                    {import.meta.env.DEV && post.data.draft && ' · Draft (visible locally only)'}
+                  </p>
+                </>
+              ) : (
+                <p class="series-part__meta">Coming soon</p>
+              )}
+            </div>
+          </li>
+        ))}
+      </ol>
+
+      <footer class="series-footer">
+        <a href="/">← Back to all posts</a>
+      </footer>
+    </div>
+  </div>
+</BaseLayout>
+
+<style>
+  .series-main {
+    min-height: 100vh;
+    padding: 4rem 0;
+  }
+
+  .series-header,
+  .series-parts,
+  .series-footer {
+    max-width: 720px;
+    margin-inline: auto;
+  }
+
+  .series-header {
+    margin-bottom: 2.5rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid var(--c-line);
+  }
+
+  .series-header__eyebrow {
+    margin: 0 0 0.75rem;
+    color: var(--c-accent);
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  .series-header__eyebrow a {
+    color: var(--c-ink-faint);
+  }
+
+  .series-header__eyebrow a:hover {
+    color: var(--c-accent);
+  }
+
+  .series-header h1 {
+    margin: 0 0 1rem;
+    font-family: var(--f-display);
+    font-size: clamp(2.25rem, 5vw, 3.25rem);
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    line-height: 1.12;
+  }
+
+  .series-header__desc {
+    margin: 0 0 1rem;
+    color: var(--c-ink-muted);
+    font-size: 1.125rem;
+    line-height: 1.55;
+  }
+
+  .series-header__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0;
+    color: var(--c-ink-muted);
+    font-size: 0.9375rem;
+  }
+
+  .series-header__meta a {
+    color: var(--c-accent);
+    text-decoration: none;
+  }
+
+  .series-header__meta a:hover {
+    text-decoration: underline;
+  }
+
+  .series-parts {
+    padding: 0;
+    list-style: none;
+  }
+
+  .series-part {
+    display: flex;
+    gap: 1.25rem;
+    padding: 1.25rem 0;
+    border-bottom: 1px solid var(--c-line);
+  }
+
+  .series-part__no {
+    flex: none;
+    width: 2rem;
+    padding-top: 0.2rem;
+    color: var(--c-ink-faint);
+    font-family: var(--f-display);
+    font-size: 1rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .series-part__title {
+    font-family: var(--f-display);
+    font-size: 1.25rem;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    line-height: 1.3;
+  }
+
+  a.series-part__title {
+    color: var(--c-ink);
+    text-decoration: none;
+  }
+
+  a.series-part__title:hover {
+    color: var(--c-accent);
+  }
+
+  .series-part__excerpt {
+    margin: 0.4rem 0;
+    color: var(--c-ink-muted);
+    line-height: 1.6;
+  }
+
+  .series-part__meta {
+    margin: 0.3rem 0 0;
+    color: var(--c-ink-faint);
+    font-size: 0.8125rem;
+  }
+
+  .series-part--soon .series-part__title {
+    color: var(--c-ink-faint);
+    font-weight: 500;
+  }
+
+  .series-footer {
+    padding-top: 2rem;
+  }
+
+  .series-footer a {
+    color: var(--c-ink-muted);
+    font-size: 0.9375rem;
+    text-decoration: none;
+  }
+
+  .series-footer a:hover {
+    color: var(--c-accent);
+  }
+
+  @media (max-width: 640px) {
+    .series-main {
+      padding: 2rem 0;
+    }
+
+    .series-header h1 {
+      font-size: clamp(1.75rem, 7vw, 2.25rem);
+    }
+  }
+</style>

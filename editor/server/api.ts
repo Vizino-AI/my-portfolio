@@ -3,7 +3,7 @@ import { createReadStream, existsSync, mkdirSync, statSync, writeFileSync } from
 import path from 'node:path';
 import sharp from 'sharp';
 import type { Plugin } from 'vite';
-import { HttpError, openBlogDb, type BlogDb, type Post, type Reference } from './db';
+import { HttpError, openBlogDb, type BlogDb, type Category, type Post, type Reference, type Series } from './db';
 
 const IMAGE_MAX_WIDTH = 1600;
 const COVER_SIZE = { width: 1600, height: 1066 };
@@ -79,6 +79,28 @@ async function route(db: BlogDb, paths: Paths, req: IncomingMessage, url: URL): 
 
   if (parts[0] === 'media' && method === 'GET') return db.listMedia();
 
+  if (parts[0] === 'taxonomy' && method === 'GET') {
+    return { categories: db.listCategories(), series: db.listSeries() };
+  }
+
+  if (parts[0] === 'categories') {
+    const slug = parts[1];
+    if (!slug && method === 'POST') return db.saveCategory(null, validateCategory(await readJson(req)));
+    if (slug && parts[2] === 'move' && method === 'POST') {
+      const { direction } = await readJson<{ direction?: number }>(req);
+      return db.moveCategory(slug, direction === -1 ? -1 : 1);
+    }
+    if (slug && !parts[2] && method === 'PUT') return db.saveCategory(slug, validateCategory(await readJson(req)));
+    if (slug && !parts[2] && method === 'DELETE') return db.deleteCategory(slug);
+  }
+
+  if (parts[0] === 'series') {
+    const slug = parts[1];
+    if (!slug && method === 'POST') return db.saveSeries(null, validateSeries(await readJson(req)));
+    if (slug && !parts[2] && method === 'PUT') return db.saveSeries(slug, validateSeries(await readJson(req)));
+    if (slug && !parts[2] && method === 'DELETE') return db.deleteSeries(slug);
+  }
+
   if (parts[0] === 'upload' && method === 'POST') {
     const kind = url.searchParams.get('kind');
     const slug = url.searchParams.get('slug');
@@ -125,7 +147,37 @@ function createPost(db: BlogDb, input: { title?: string; slug?: string }): Post 
     draft: true,
     body: '',
     references: [],
+    category: null,
+    series: null,
+    seriesOrder: null,
   });
+}
+
+function validateCategory(input: Partial<Category>): Omit<Category, 'postCount'> {
+  const name = typeof input.name === 'string' ? input.name.trim() : '';
+  if (!name) throw new HttpError(400, 'A category needs a name');
+  const slug = (typeof input.slug === 'string' && input.slug.trim()) || slugify(name);
+  if (!SLUG_RE.test(slug)) throw new HttpError(400, 'Category slug may only use lowercase letters, digits and single hyphens');
+  return {
+    slug,
+    name,
+    description: typeof input.description === 'string' ? input.description.trim() : '',
+    position: Number.isInteger(input.position) ? input.position! : 0,
+  };
+}
+
+function validateSeries(input: Partial<Series>): Omit<Series, 'parts'> {
+  const title = typeof input.title === 'string' ? input.title.trim() : '';
+  if (!title) throw new HttpError(400, 'A series needs a title');
+  const slug = (typeof input.slug === 'string' && input.slug.trim()) || slugify(title);
+  if (!SLUG_RE.test(slug)) throw new HttpError(400, 'Series slug may only use lowercase letters, digits and single hyphens');
+  return {
+    slug,
+    title,
+    description: typeof input.description === 'string' ? input.description.trim() : '',
+    status: input.status === 'complete' ? 'complete' : 'ongoing',
+    firstNumber: input.firstNumber === 0 ? 0 : 1,
+  };
 }
 
 /**
@@ -155,7 +207,15 @@ function validatePost(input: Partial<Post>): Post {
         })
       )
       .filter((r) => r.title || r.url),
+    category: opt(input.category),
+    series: opt(input.series),
+    seriesOrder: null,
   };
+  if (post.series) {
+    const order = Number(input.seriesOrder);
+    if (!Number.isInteger(order) || order < 1) throw new HttpError(400, 'Part number in the series must be a whole number from 1 up');
+    post.seriesOrder = order;
+  }
 
   if (!SLUG_RE.test(post.slug)) throw new HttpError(400, 'Slug may only use lowercase letters, digits and single hyphens');
   if (!DATE_RE.test(post.date)) throw new HttpError(400, 'Date must be YYYY-MM-DD');

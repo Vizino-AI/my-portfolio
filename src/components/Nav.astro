@@ -23,24 +23,9 @@ const isActive = (href: string) =>
 
     <nav aria-label="Primary">
       <ul class="nav__list" id="primary-nav-list">
-        <li><a href="/#work" class="nav__link">Portfolio</a></li>
         <li>
-          <a href="/blog" class="nav__link" aria-current={isActive('/blog') ? 'page' : undefined}>
+          <a href="/" class="nav__link" aria-current={path === '/' || path.startsWith('/blog/') ? 'page' : undefined}>
             Blog
-          </a>
-        </li>
-        <li>
-          <a href="/how-we-work" class="nav__link" aria-current={isActive('/how-we-work') ? 'page' : undefined}>
-            How We Work
-          </a>
-        </li>
-        <li>
-          <a
-            href="/engagement-model"
-            class="nav__link"
-            aria-current={isActive('/engagement-model') ? 'page' : undefined}
-          >
-            Engagement Model
           </a>
         </li>
         <li>

@@ -16,6 +16,9 @@ export interface Post {
   draft: boolean;
   body: string;
   references: Reference[];
+  category: string | null;
+  series: string | null;
+  seriesOrder: number | null;
 }
 
 export interface PostSummary {
@@ -25,6 +28,34 @@ export interface PostSummary {
   draft: boolean;
   excerpt: string;
   lastSavedAt: string | null;
+  category: string | null;
+  series: string | null;
+  seriesOrder: number | null;
+}
+
+export interface Category {
+  slug: string;
+  name: string;
+  description: string;
+  position: number;
+  postCount: number;
+}
+
+export type SeriesStatus = 'ongoing' | 'complete';
+
+export interface Series {
+  slug: string;
+  title: string;
+  description: string;
+  status: SeriesStatus;
+  /** What the site calls the first part: 1, or 0 for a series that opens with a "Part 0". */
+  firstNumber: 0 | 1;
+  parts: Array<{ slug: string; title: string; order: number; draft: boolean }>;
+}
+
+export interface Taxonomy {
+  categories: Category[];
+  series: Series[];
 }
 
 export interface Revision {
@@ -72,6 +103,15 @@ export const api = {
   listRevisions: (slug: string) => request<Revision[]>('GET', `/api/posts/${enc(slug)}/revisions`),
   getRevision: (id: number) => request<Post>('GET', `/api/revisions/${id}`),
   listMedia: () => request<Media[]>('GET', '/api/media'),
+
+  taxonomy: () => request<Taxonomy>('GET', '/api/taxonomy'),
+  createCategory: (c: Partial<Category>) => request<{ ok: true }>('POST', '/api/categories', c),
+  saveCategory: (originalSlug: string, c: Partial<Category>) => request<{ ok: true }>('PUT', `/api/categories/${enc(originalSlug)}`, c),
+  moveCategory: (slug: string, direction: -1 | 1) => request<{ ok: true }>('POST', `/api/categories/${enc(slug)}/move`, { direction }),
+  deleteCategory: (slug: string) => request<{ ok: true }>('DELETE', `/api/categories/${enc(slug)}`),
+  createSeries: (s: Partial<Series>) => request<{ ok: true }>('POST', '/api/series', s),
+  saveSeries: (originalSlug: string, s: Partial<Series>) => request<{ ok: true }>('PUT', `/api/series/${enc(originalSlug)}`, s),
+  deleteSeries: (slug: string) => request<{ ok: true }>('DELETE', `/api/series/${enc(slug)}`),
 
   async upload(file: File, opts: { kind: 'image' | 'video' | 'cover'; slug: string; alt?: string }) {
     const params = new URLSearchParams({ kind: opts.kind, slug: opts.slug, filename: file.name });

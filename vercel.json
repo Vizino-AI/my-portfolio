@@ -4,5 +4,6 @@
   "outputDirectory": "dist",
   "framework": "astro",
   "cleanUrls": true,
-  "trailingSlash": false
+  "trailingSlash": false,
+  "redirects": [{ "source": "/work/:slug", "destination": "/", "permanent": false }]
 }

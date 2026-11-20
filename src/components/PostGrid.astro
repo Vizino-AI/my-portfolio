@@ -1,0 +1,57 @@
+---
+import BlogCard from './BlogCard.astro';
+import { cardLabels, type Category, type Post, type SeriesWithParts } from '../utils/blog';
+
+interface Props {
+  posts: Post[];
+  categories: Category[];
+  seriesList: SeriesWithParts[];
+  /** Leave out the category label, e.g. on that category's own page. */
+  hideCategory?: boolean;
+}
+
+const { posts, categories, seriesList, hideCategory = false } = Astro.props;
+---
+
+{posts.length === 0 ? (
+  <p class="post-grid__empty">No posts yet.</p>
+) : (
+  <div class="post-grid">
+    {posts.map((post) => {
+      const labels = cardLabels(post, categories, seriesList);
+      return (
+        <BlogCard
+          title={post.data.title}
+          date={post.data.date}
+          excerpt={post.data.excerpt}
+          slug={post.id}
+          cover={post.data.cover}
+          coverAlt={post.data.coverAlt}
+          category={hideCategory ? undefined : labels.category}
+          series={labels.series}
+        />
+      );
+    })}
+  </div>
+)}
+
+<style>
+  .post-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1.5rem;
+  }
+
+  .post-grid__empty {
+    color: var(--c-ink-muted);
+    text-align: center;
+    padding: 3rem 0;
+  }
+
+  @media (max-width: 640px) {
+    .post-grid {
+      grid-template-columns: 1fr;
+      gap: 1rem;
+    }
+  }
+</style>

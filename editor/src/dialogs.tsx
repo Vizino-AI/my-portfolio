@@ -24,7 +24,7 @@ export function Modal({ title, onClose, children, wide }: { title: string; onClo
   );
 }
 
-function Tabs<T extends string>({ value, options, onChange }: { value: T; options: Array<[T, string]>; onChange: (v: T) => void }) {
+export function Tabs<T extends string>({ value, options, onChange }: { value: T; options: Array<[T, string]>; onChange: (v: T) => void }) {
   return (
     <div className="tabs" role="tablist">
       {options.map(([v, label]) => (

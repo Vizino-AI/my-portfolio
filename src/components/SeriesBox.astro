@@ -1,0 +1,204 @@
+---
+import { shortPartTitle, type findInSeries } from '../utils/blog';
+
+interface Props {
+  inSeries: NonNullable<ReturnType<typeof findInSeries>>;
+  /**
+   * "aside": in the right-hand column beside the article, for wide screens.
+   * "inline": a collapsed line above the article body, for screens too narrow for the aside.
+   */
+  variant: 'aside' | 'inline';
+}
+
+const { inSeries, variant } = Astro.props;
+const { series, parts, current } = inSeries;
+const label = (part: (typeof parts)[number]) => shortPartTitle(series, part.post);
+// "Part 1 of 7" reads wrong when counting starts at 0, so say the size separately there.
+const position =
+  series.data.firstNumber === 1 ? `Part ${current.number} of ${parts.length}` : `Part ${current.number} · ${parts.length} parts`;
+---
+
+{variant === 'aside' ? (
+  <nav class="series-box series-box--aside" aria-label={`${series.data.title} series`}>
+    <p class="series-box__label">{position}</p>
+    <a class="series-box__title" href={`/blog/series/${series.id}`}>{series.data.title}</a>
+    <ol class="series-box__list">
+      {parts.map((part) => (
+        <li aria-current={part === current ? 'step' : undefined}>
+          {part === current ? (
+            <span class="series-box__item" title={part.post.data.title}>
+              <span class="series-box__no">{part.number}</span><span class="series-box__part">{label(part)}</span>
+            </span>
+          ) : part.visible ? (
+            <a class="series-box__item" href={`/blog/${part.post.id}`} title={part.post.data.title}>
+              <span class="series-box__no">{part.number}</span><span class="series-box__part">{label(part)}</span>
+            </a>
+          ) : (
+            <span class="series-box__item series-box__item--soon" title={part.post.data.title}>
+              <span class="series-box__no">{part.number}</span>
+              <span><span class="series-box__part">{label(part)}</span><em>Coming soon</em></span>
+            </span>
+          )}
+        </li>
+      ))}
+    </ol>
+  </nav>
+) : (
+  <details class="series-box series-box--inline">
+    <summary>
+      <span>
+        <span class="series-box__title">{series.data.title}</span>
+        <span class="series-box__label"> · {position}</span>
+      </span>
+      <span class="series-box__toggle">All parts</span>
+    </summary>
+    <ol class="series-box__list">
+      {parts.map((part) => (
+        <li aria-current={part === current ? 'step' : undefined}>
+          {part === current ? (
+            <span class="series-box__item">
+              <span class="series-box__no">{part.number}</span><span>{label(part)}</span>
+            </span>
+          ) : part.visible ? (
+            <a class="series-box__item" href={`/blog/${part.post.id}`}>
+              <span class="series-box__no">{part.number}</span><span>{label(part)}</span>
+            </a>
+          ) : (
+            <span class="series-box__item series-box__item--soon">
+              <span class="series-box__no">{part.number}</span>
+              <span>{label(part)}<em>Coming soon</em></span>
+            </span>
+          )}
+        </li>
+      ))}
+    </ol>
+  </details>
+)}
+
+<style>
+  /* Plain type and hairlines, same language as the article outline ("On this
+     page"): no card, no fill, no coloured edge. */
+  .series-box__label {
+    margin: 0;
+    color: var(--c-ink-faint);
+    font-size: 0.8125rem;
+  }
+
+  .series-box__title {
+    color: var(--c-ink);
+    font-family: var(--f-display);
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  a.series-box__title:hover {
+    color: var(--c-accent);
+  }
+
+  .series-box__list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border-left: 1px solid var(--c-line);
+  }
+
+  .series-box__item {
+    display: flex;
+    gap: 0.6rem;
+    margin-left: -1px;
+    padding: 0.35rem 0 0.35rem 0.75rem;
+    border-left: 1px solid transparent;
+    color: var(--c-ink-muted);
+    font-size: var(--t-small);
+    line-height: 1.35;
+    text-decoration: none;
+    transition: color var(--dur) var(--ease);
+  }
+
+  a.series-box__item:hover {
+    color: var(--c-ink);
+  }
+
+  li[aria-current] .series-box__item {
+    border-left-color: var(--c-ink);
+    color: var(--c-ink);
+    font-weight: 500;
+  }
+
+  .series-box__no {
+    flex: none;
+    min-width: 0.9rem;
+    color: var(--c-ink-faint);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .series-box__item--soon {
+    color: var(--c-ink-faint);
+  }
+
+  .series-box__item--soon em {
+    display: block;
+    font-size: 0.75rem;
+    font-style: normal;
+  }
+
+  /* Aside: label, title, then the list. Long titles cut to two lines; the
+     full title is in the tooltip and on the series page. */
+  .series-box--aside .series-box__title {
+    display: block;
+    margin: 0.15rem 0 0.75rem;
+  }
+
+  .series-box--aside .series-box__part {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  /* Inline: one line between hairlines above the body, opens to the list.
+     Only where the aside doesn't fit (same 1180px as the article page). */
+  .series-box--inline {
+    max-width: 720px;
+    margin: 0 auto 2.5rem;
+    border-block: 1px solid var(--c-line);
+  }
+
+  .series-box--inline summary {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.8rem 0;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .series-box--inline summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .series-box--inline .series-box__toggle {
+    flex: none;
+    color: var(--c-ink-faint);
+    font-size: 0.8125rem;
+  }
+
+  .series-box--inline .series-box__toggle::after {
+    content: ' +';
+  }
+
+  .series-box--inline[open] .series-box__toggle::after {
+    content: ' −';
+  }
+
+  .series-box--inline .series-box__list {
+    margin-bottom: 1rem;
+  }
+
+  @media (min-width: 1180px) {
+    .series-box--inline {
+      display: none;
+    }
+  }
+</style>

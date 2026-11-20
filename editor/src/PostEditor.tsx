@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EditorContent, useEditor, type Editor } from '@tiptap/react';
-import { api, SITE_ORIGIN, type Post, type Reference } from './api';
+import { api, SITE_ORIGIN, type Post, type Reference, type Taxonomy } from './api';
 import { buildExtensions } from './extensions';
 import { lineDiff, normalizeForCompare, toEditorMarkdown } from './markdown';
 import { Toolbar } from './Toolbar';
 import { ImageDialog, LinkBar, RevisionsDialog, VideoDialog } from './dialogs';
+import type { TaxonomyRename } from './taxonomy';
 
 type SaveState =
   | { status: 'saved'; at: Date | null }
@@ -27,11 +28,17 @@ export function loadMarkdown(editor: Editor, md: string) {
 
 export function PostEditor({
   slug,
+  taxonomy,
+  lastRename,
+  onManageTaxonomy,
   onSaved,
   onSlugChange,
   onDeleted,
 }: {
   slug: string;
+  taxonomy: Taxonomy;
+  lastRename: TaxonomyRename | null;
+  onManageTaxonomy: () => void;
   onSaved: () => void;
   onSlugChange: (slug: string) => void;
   onDeleted: () => void;
@@ -105,6 +112,15 @@ export function PostEditor({
       cancelled = true;
     };
   }, [slug, editor]);
+
+  // The database already moved this post to the renamed category/series; keep
+  // the local copy in step without marking it dirty.
+  useEffect(() => {
+    const p = postRef.current;
+    if (!lastRename || !p || p[lastRename.field] !== lastRename.from) return;
+    postRef.current = { ...p, [lastRename.field]: lastRename.to };
+    setPost(postRef.current);
+  }, [lastRename]);
 
   /* -------------------------------------------------------------- saving */
 
@@ -259,7 +275,10 @@ export function PostEditor({
     const { slug: _slug, ...rest } = rev; // a revision never renames the post
     loadMarkdown(editor, rev.body);
     bodyTouched.current = true;
-    update(rest);
+    // Revisions saved before categories existed have no such fields; keep the
+    // current ones rather than clearing them.
+    const { category, series, seriesOrder } = postRef.current!;
+    update({ ...({ category, series, seriesOrder } as Partial<Post>), ...rest });
     setDialog(null);
   }
 
@@ -329,6 +348,8 @@ export function PostEditor({
       <MetaPanel
         post={post}
         update={update}
+        taxonomy={taxonomy}
+        onManageTaxonomy={onManageTaxonomy}
         slug={originalSlug.current}
         coverBust={coverBust}
         onCover={uploadCover}
@@ -384,6 +405,8 @@ function SaveIndicator({ state, onRetry }: { state: SaveState; onRetry: () => vo
 function MetaPanel({
   post,
   update,
+  taxonomy,
+  onManageTaxonomy,
   slug,
   coverBust,
   onCover,
@@ -394,6 +417,8 @@ function MetaPanel({
 }: {
   post: Post;
   update: (p: Partial<Post>) => void;
+  taxonomy: Taxonomy;
+  onManageTaxonomy: () => void;
   slug: string;
   coverBust: number;
   onCover: (f: File | undefined) => void;
@@ -459,6 +484,8 @@ function MetaPanel({
         </label>
       </section>
 
+      <Grouping post={post} update={update} taxonomy={taxonomy} onManage={onManageTaxonomy} />
+
       <section className="meta__section">
         <h3>封面</h3>
         {post.cover ? (
@@ -496,6 +523,100 @@ function MetaPanel({
         )}
       </section>
     </aside>
+  );
+}
+
+function Grouping({
+  post,
+  update,
+  taxonomy,
+  onManage,
+}: {
+  post: Post;
+  update: (p: Partial<Post>) => void;
+  taxonomy: Taxonomy;
+  onManage: () => void;
+}) {
+  const series = taxonomy.series.find((s) => s.slug === post.series);
+  // The other parts, as they are in the database; this post's own place comes
+  // from what's being edited, so the list is right before the autosave lands.
+  const others = series?.parts.filter((p) => p.slug !== post.slug) ?? [];
+  const clash = others.find((p) => p.order === post.seriesOrder);
+  const parts = series
+    ? [...others, { slug: post.slug, title: post.title, order: post.seriesOrder ?? 0, draft: post.draft }].sort(
+        (a, b) => a.order - b.order
+      )
+    : [];
+
+  function pickSeries(slug: string) {
+    if (!slug) return update({ series: null, seriesOrder: null });
+    const target = taxonomy.series.find((s) => s.slug === slug);
+    const taken = target?.parts.filter((p) => p.slug !== post.slug).map((p) => p.order) ?? [];
+    update({ series: slug, seriesOrder: Math.max(0, ...taken) + 1 });
+  }
+
+  return (
+    <section className="meta__section">
+      <h3>
+        分類與系列
+        <button type="button" className="link-btn" onClick={onManage}>
+          管理
+        </button>
+      </h3>
+      <label className="field">
+        <span>分類</span>
+        <select value={post.category ?? ''} onChange={(e) => update({ category: e.target.value || null })}>
+          <option value="">（未分類）</option>
+          {taxonomy.categories.map((c) => (
+            <option key={c.slug} value={c.slug}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+        {taxonomy.categories.length === 0 && <small className="hint">還沒有分類，按「管理」新增。</small>}
+      </label>
+      <div className="field-row">
+        <label className="field">
+          <span>系列</span>
+          <select value={post.series ?? ''} onChange={(e) => pickSeries(e.target.value)}>
+            <option value="">（不屬於系列）</option>
+            {taxonomy.series.map((s) => (
+              <option key={s.slug} value={s.slug}>
+                {s.title}
+              </option>
+            ))}
+          </select>
+        </label>
+        {post.series && (
+          <label className="field meta__order">
+            <span>順序</span>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              value={post.seriesOrder ?? ''}
+              onChange={(e) => update({ seriesOrder: e.target.value ? Math.max(1, Math.floor(Number(e.target.value))) : null })}
+              aria-invalid={!!clash || !post.seriesOrder}
+            />
+          </label>
+        )}
+      </div>
+      {clash && <small className="error">順序 {clash.order} 已經是「{clash.title}」，換一個號碼。</small>}
+      {series && (
+        <ol className="meta__parts">
+          {parts.map((p, i) => (
+            <li key={p.slug} className={p.slug === post.slug ? 'is-current' : ''}>
+              <span className="meta__part-no">Part {i + series.firstNumber}</span>
+              <span>{p.title || '（未命名）'}</span>
+              {p.draft && <span className="badge badge--draft">草稿</span>}
+            </li>
+          ))}
+        </ol>
+      )}
+      {series && (
+        <p className="hint">「順序」只決定先後，網站會照先後重新編成 Part {series.firstNumber}、{series.firstNumber + 1}…（可在「管理」改成從 0 或 1 開始），所以號碼跳號沒關係。草稿會以「Coming soon」出現在系列目錄。</p>
+      )}
+    </section>
   );
 }
 

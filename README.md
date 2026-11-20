@@ -2,7 +2,7 @@
 
 ![Homepage screenshot](public/images/screenshot.png)
 
-Portfolio and services site for Yu-Wen Chen (Katness), published under the brand
+Portfolio and services site for Katness Chen, published under the brand
 name **Vizino AI** at <https://portfolio.vizino.ai>. Static site, no backend, no
 runtime database, no user accounts.
 
@@ -73,21 +73,26 @@ scripts/              One-off maintenance scripts, not part of the build
 src/
   components/         Presentational .astro components
   content/
-    config.ts         Zod schemas for both collections
-    loaders/          Custom Astro content loader for the SQLite blog
+    config.ts         Zod schemas for every collection
+    loaders/          Custom Astro content loaders for the SQLite blog
     work/             Case studies, one Markdown file per project
   data/               Static site data (profile, category labels)
   layouts/            BaseLayout — SEO, OG tags, Person JSON-LD
-  pages/              Routes; [slug].astro files use getStaticPaths
+  pages/              Routes; [slug].astro files use getStaticPaths. Live pages:
+                      the homepage (the blog), /blog/<slug> and its category and
+                      series pages, /about. Files starting with _ are taken down
+                      (Astro skips them): _work/, _how-we-work, _engagement-model
   styles/             tokens.css (variables) then global.css (reset + base)
-  utils/              Build-time helpers — drafts.ts owns the draft rule
+  utils/              Build-time helpers — drafts.ts owns the draft rule; blog.ts
+                      groups posts by category and series
 _originals/           Pre-optimisation source images (gitignored)
 _drafts/              Working area — see Blog workflow and Hidden sections
 ```
 
 ## Content model
 
-Two collections, defined in `src/content/config.ts`.
+Four collections, defined in `src/content/config.ts`: `work`, `blog`, and
+`blogCategories` / `blogSeries` beside it.
 
 **`work`** — case studies as Markdown in `src/content/work/`, one file per
 project, validated by Zod.
@@ -99,14 +104,37 @@ edits appear without a restart.
 
 | Table | Holds | Read by the site? |
 |---|---|---|
-| `posts` | One row per post: metadata plus the body as Markdown in `body_md` | Yes |
+| `posts` | One row per post: metadata, the body as Markdown in `body_md`, and its `category_slug`, `series_slug` and `series_order` | Yes |
 | `post_references` | The post's Sources list, ordered by `position`, rendered after the body | Yes |
+| `categories` | Slug, name, description, `position` (the order on the site) | Yes |
+| `series` | Slug, title, description, `status` (`ongoing` / `complete`) | Yes |
 | `post_revisions` | A JSON snapshot per save; saves within 10 minutes share one row, 100 kept per post | No — editor only |
 | `media` | Every file in `public/images/blog/`, with kind, owning post, size and dimensions | No — editor only |
 
-The editor creates the last three tables on first run (additive only — it never
-alters `posts`), and the loader treats a missing `post_references` as "no
-references", so an older database still builds.
+The editor creates every table but `posts` on first run, and adds the three
+nullable columns to `posts` with `ADD COLUMN` — additive only, so existing rows
+and `blog:push` are untouched. The loaders treat a missing table as empty, so an
+older database still builds.
+
+### Categories and series
+
+Two different things, on purpose:
+
+- **Category** — what a post is about. One per post, optional. Each category
+  with at least one visible post gets `/blog/category/<slug>` and a link in the
+  row at the top of `/blog`.
+- **Series** — posts meant to be read in order. Optional; a post is in at most
+  one. Each series with a visible part gets `/blog/series/<slug>`, a card on
+  `/blog`, and every part shows the series' contents near the top and links to
+  the previous / next part at the bottom.
+
+Post URLs stay `/blog/<slug>` either way, so recategorising never breaks a link.
+Parts are numbered 1..n on the site by `series_order`, so gaps in the editor's
+numbers don't show. **A draft part is listed by title as "Coming soon"** in the
+series contents of a production build (not linked, no page) — publish the
+working title you are happy for readers to see. `src/utils/blog.ts` holds these
+rules; the schema uses `reference()`, so a post pointing at a missing category
+or series fails the build.
 
 ### Draft handling — read this before adding content
 
@@ -146,7 +174,10 @@ npm run dev      # http://localhost:4321 — picks up every save
 The editor is a React + Tiptap single-page app served by Vite, with a small API
 (`editor/server/`) mounted on the same dev server. It lists posts, creates
 drafts, autosaves about a second after typing stops, and handles publish /
-unpublish, metadata, cover, references and version history. A post becomes
+unpublish, metadata, category and series, cover, references and version
+history. Categories and series themselves are created and renamed in the
+**管理** dialog (sidebar, or the post's 分類與系列 panel); renaming a slug moves
+every post with it, and one can only be deleted once no post uses it. A post becomes
 public on the next deploy after it is published *and* `db/blog.sqlite3` is
 committed.
 
@@ -197,8 +228,8 @@ npm run blog:pull -- my-post-slug   # db/blog.sqlite3 → _drafts/my-post-slug.m
 npm run blog:push -- my-post-slug   # _drafts/my-post-slug.md → db/blog.sqlite3
 ```
 
-They only know the `posts` table: references are left alone, and a push records
-no revision. `_drafts/` is a scratch area, gitignored. Only the database is the
+They only know the original `posts` columns: references, category and series
+are left alone, and a push records no revision. `_drafts/` is a scratch area, gitignored. Only the database is the
 real store — do not treat a file in `_drafts/` as the source of truth.
 
 ## Images
@@ -236,7 +267,12 @@ without asking:
 
 ## Case study page structure
 
-`src/pages/work/[slug].astro` renders, in order: title and tagline → MetaBar
+The case studies are taken down for now: the page lives at
+`src/pages/_work/` (the leading underscore keeps Astro from building it),
+`/work`, `/how-we-work`, `/engagement-model` and `/blog` redirect to the
+homepage (`astro.config.mjs`), and `/work/<slug>` does too (`vercel.json`).
+To bring them back, rename the files without the underscore and drop the
+redirects. When live, `src/pages/work/[slug].astro` renders, in order: title and tagline → MetaBar
 (year / role / duration / live and GitHub links) → full-width cover → StatRow
 (`highlights`) → the Markdown body → ProjectNav (previous / next project).
 
@@ -257,12 +293,8 @@ Real problems, recorded so they are not rediscovered:
 - **`scripts/shoot.mjs` only runs on the original author's machine.** Line 1
   imports Playwright through an absolute path into an unrelated local project.
   It needs Playwright as a real devDependency before anyone else can run it.
-- **Voice is inconsistent across pages.** `index.astro` and `about.astro` speak
-  as one person; `how-we-work.astro` and `engagement-model.astro` still use
-  "we" and "our". Pick one before the next content pass.
-- **`featured` is set to `true` on every case study**, so the filter in
-  `index.astro` currently selects everything. Harmless, but the field is not
-  doing any work.
+- **Voice is inconsistent.** The site presents as a studio (Vizino AI), but
+  `about.astro` still speaks as one person. Pick one before the next content pass.
 - **`db/blog.sqlite3` is a binary committed to Git**, so post edits produce
   opaque diffs and can conflict badly. Acceptable for one author; revisit if
   that changes. Revision snapshots make the file grow with every writing

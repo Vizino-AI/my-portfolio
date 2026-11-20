@@ -222,6 +222,25 @@ input[type='file'] {
   box-shadow: 0 0 0 1px var(--c-line);
 }
 
+.group-filter {
+  display: flex;
+  gap: 0.4rem;
+  margin: 0 1rem 0.75rem;
+}
+
+.group-filter select {
+  flex: 1;
+  min-width: 0;
+  padding-block: 0.3rem;
+  font-size: 12px;
+}
+
+.group-filter button {
+  flex: none;
+  padding: 0.3rem 0.6rem;
+  font-size: 12px;
+}
+
 .post-list {
   flex: 1;
   margin: 0;
@@ -806,6 +825,47 @@ input[type='file'] {
   text-transform: uppercase;
 }
 
+.meta__section h3 .link-btn {
+  float: right;
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.meta__order {
+  flex: 0 0 4.5rem !important;
+}
+
+.meta__parts {
+  margin: 0 0 0.5rem;
+  padding: 0;
+  list-style: none;
+  border-left: 2px solid var(--c-line);
+}
+
+.meta__parts li {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  padding: 0.25rem 0.5rem;
+  color: var(--c-ink-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.meta__parts li.is-current {
+  margin-left: -2px;
+  border-left: 2px solid var(--c-accent);
+  color: var(--c-ink);
+  font-weight: 500;
+}
+
+.meta__part-no {
+  flex: 0 0 2.75rem;
+  color: var(--c-ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
 .meta__section--quiet {
   display: flex;
   gap: 0.5rem;
@@ -1066,4 +1126,72 @@ input[type='file'] {
     border-top: 1px solid var(--c-line);
     border-left: 0;
   }
+}
+
+/* ------------------------------------------------------- Categories & series */
+
+.taxonomy__list {
+  margin: 0.75rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.taxonomy__item {
+  margin-bottom: 0.75rem;
+  padding: 0.85rem 0.85rem 0.6rem;
+  border: 1px solid var(--c-line);
+  border-radius: var(--radius);
+}
+
+.taxonomy__item .field {
+  margin-bottom: 0.6rem;
+}
+
+.taxonomy__status {
+  flex: 0 0 7rem !important;
+}
+
+.taxonomy__tools {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.taxonomy__tools .hint {
+  flex: 1;
+}
+
+.taxonomy__parts {
+  margin: 0 0 0.6rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius);
+  background: var(--c-bg-soft);
+  list-style: none;
+  font-size: 13px;
+}
+
+.taxonomy__parts li {
+  display: flex;
+  gap: 0.6rem;
+  align-items: baseline;
+  padding: 0.15rem 0;
+}
+
+.taxonomy__parts a {
+  color: var(--c-ink);
+}
+
+.taxonomy__part-no {
+  flex: 0 0 3.5rem;
+  color: var(--c-ink-faint);
+  font-size: 12px;
+}
+
+.taxonomy__add {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.taxonomy__add button {
+  flex: none;
 }

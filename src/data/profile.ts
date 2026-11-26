@@ -58,7 +58,7 @@ export const profile = {
   role: 'Helping non-technical founders turn vibe-coded prototypes into launch-ready MVPs.',
   location: 'Ottawa, Canada',
   email: 'contact@vizino.ai',
-  linkedin: 'https://www.linkedin.com/in/yu-wen-chen-katness-chen-8340b9a4/',
+  linkedin: 'https://www.linkedin.com/in/katness-chen-8340b9a4/',
   github: 'https://github.com/KatnessChen',
   resume: null as string | null,
 

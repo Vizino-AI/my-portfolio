@@ -5,7 +5,7 @@
 - 職稱定位（一句話，出現在 Hero 大字下方）：Software Engineer building AI-integrated products.
 - 所在地：Ottawa, Canada
 - Email：yuwen.chen.ca@gmail.com
-- LinkedIn URL：https://www.linkedin.com/in/yu-wen-chen-katness-chen-8340b9a4/
+- LinkedIn URL：https://www.linkedin.com/in/katness-chen-8340b9a4/
 - GitHub URL：https://github.com/KatnessChen
 - 履歷 PDF：（有的話放到 public/resume.pdf，這裡寫「有」）
 
